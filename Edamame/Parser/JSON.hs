@@ -1,21 +1,30 @@
 
-module Edamame.Parser.JSON (parseJSON) where
+module Edamame.Parser.JSON
+  (
+    parseJSON,
+    JSONValue(..)
+  ) where
 
 import Edamame.Parser
 import Data.Array.IArray
+import Data.List
 
 data JSONValue =
   JSONString String |
   JSONNumber Double |
   JSONObject [(String,JSONValue)] |
-  --JSONArray (Array Int JSONValue) |
-  JSONArray [JSONValue] |
+  JSONArray (Array Int JSONValue) |
   JSONBool Bool |
   JSONNull
-  deriving (Show,Eq)
+  deriving (Eq)
 
-type JObj = [(String,JSONValue)]
-type JArr = Array Int JSONValue
+instance Show JSONValue where
+  show (JSONString str) = str
+  show (JSONNumber num) = show num
+  show (JSONObject obj) = "{}"
+  show (JSONArray arr) = "[" ++ (concat $ intersperse "," $ map show $ elems arr) ++ "]"
+  show (JSONBool b) = show b
+  show JSONNull = "null"
 
 notQuotation :: Parser Char
 notQuotation = sat $ not . (=='\"')
@@ -61,22 +70,25 @@ kv = do
 
 jsonobj :: Parser JSONValue
 jsonobj = do
-  char '{'
+  token $ char '{'
   xs <- many (kv >>= \x-> token (char ',') >> return x)
   lst <- (kv >>= return . return) <||> return []
-  char '}'
+  token $ char '}'
   return $ JSONObject $ xs++lst
 
 
 jsonarr :: Parser JSONValue
 jsonarr = do
-  char '['
+  token $ char '['
   xs <- many (jsonvalue >>= \v-> token (char ',') >> return v)
   lst <- (jsonvalue >>= return . return)  <||> return []
-  char ']'
-  return $ JSONArray $ xs++lst 
+  token $ char ']'
+  let list = xs++lst
+      len = length list
+  return $ JSONArray $ listArray (0,len-1) list
 
 jsonvalue :: Parser JSONValue
 jsonvalue = token (jsonstring <||> jsonnum <||> jsonobj  <||> jsonarr <||> jsonbool <||> jsonnull)
 
-parseJSON = jsonvalue
+parseJSON :: String -> Maybe JSONValue
+parseJSON inp = fst <$> parse jsonvalue inp
